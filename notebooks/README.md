@@ -2,9 +2,7 @@
 
 ## Instrucciones de ejecución
 
-1. Abrir primero: `notebooks/01_cargar_datos.ipynb`
-2. Luego ejecutar: `notebooks/02_modelos.ipynb`
-3. Finalmente: `notebooks/03_analisis.ipynb`
+1. 
 
 ## Contenido del repositorio
 
