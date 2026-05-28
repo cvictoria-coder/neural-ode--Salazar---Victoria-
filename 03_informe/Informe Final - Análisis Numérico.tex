@@ -1,0 +1,189 @@
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{float}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{placeins}
+\usepackage{enumitem}
+\geometry{margin=2.5cm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    urlcolor=blue!50!black,
+    citecolor=blue!50!black
+}
+\setlength{\parindent}{0pt}
+\usepackage{lmodern}
+\title{\textbf{Neural ODEs sobre Datos Biológicos}\\
+\large Análisis Numérico -- Universidad Nacional de Colombia}
+\author{Juan José Salazar Bedoya \and Cristian Camilo Victoria Parra}
+\date{26 de mayo de 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{center}
+\textbf{Profesor:} Carlos Manuel Orrego Franco\\
+\textbf{Dataset:} COVID-19 JHU (nuevos casos diarios)
+\end{center}
+
+\section{Descripción del dataset}
+
+\begin{itemize}
+    \item \textbf{Dataset:} COVID-19 JHU (nuevos casos diarios).
+    \item \textbf{Trayectorias:} 178.
+    \item \textbf{Pasos de tiempo:} 400.
+    \item \textbf{Dimensiones:} 1.
+    \item \textbf{Variables:} Nuevos casos normalizados.
+    \item \textbf{Rango:} $[-1.098,\,7.928]$.
+    \item \textbf{División de datos:} 143 trayectorias de entrenamiento y 35 de prueba.
+\end{itemize}
+
+A partir de la exploración del dataset, se observa que las trayectorias de nuevos casos diarios normalizados presentan alta variabilidad entre países. Algunas series permanecen cerca de valores bajos durante gran parte del intervalo, mientras que otras muestran picos pronunciados en distintos momentos del tiempo (véase figura \ref{fig:exploracion}). También se evidencian cambios abruptos y máximos locales marcados, posiblemente asociados a olas epidémicas, retrasos en reportes o acumulación administrativa de casos (véase figura \ref{fig:exploracion}). En conjunto, esto muestra que el dataset presenta trayectorias heterogéneas e irregulares, lo cual hace que el problema de predicción temporal sea más complejo.
+
+\section{Hiperparámetros elegidos y justificación}
+
+\begin{table}[H]
+\centering
+\caption{Hiperparámetros elegidos.}
+\label{tab:hiperparametros}
+\begin{tabular}{lc}
+\toprule
+\textbf{Hiperparámetro} & \textbf{Valor} \\
+\midrule
+\texttt{dim\_latente} & 16 \\
+\texttt{n\_pasos\_ode} & 10 \\
+\texttt{learning\_rate} & 0.001 \\
+\texttt{n\_epochs} & 33 \\
+\texttt{batch\_size} & 32 \\
+\texttt{dim\_oculto\_f} & 56 \\
+\texttt{dim\_oculto\_enc} & 40 \\
+\texttt{dim\_oculto\_dec} & 56 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Lo primero, para elegir \texttt{dim\_latente} se buscó un equilibrio entre velocidad y capacidad expresiva en el entrenamiento. Si se tomaba \texttt{dim\_latente=4}, se podía tener un entrenamiento rápido, pero podía ser algo insuficiente para trayectorias complejos. Algo parecido pasa si se toma \texttt{dim\_latente=8}. Por otro lado, si se tomaba \texttt{dim\_latente=32}, el entrenamiento podía tener un costo temporal y computacional alto, a pesar de poder llegar a tener un buen entrenamiento para trayectorias complejas, no se llegaría a compensar debido al costo que puede llegar a tener. Por eso se eligió \texttt{dim\_latente=16}.\\
+
+Ahora bien, para \texttt{n\_pasos\_ode}, se buscaba también un equilibrio, caso similar al anterior. Si se tomaba \texttt{n\_paso\_ode=6}, se podía reducir el tiempo de la integración de la ODE, pero teniendo resultados menos precisos. Ahora bien, si se tomaba \texttt{n\_paso\_ode=20}, se mejora el resultado de la integración, pero sacrificando la velocidad y aumentando el costo temporal. Por lo tanto, se decidió por un equilibrio.\\
+
+Luego, se eligió una \texttt{learning\_rate=0.001}, ya que se buscaba un equilibrio para el optimizador. Esto debido a que bajarlo podía aumentar el costo temporar o subirlo podía generar inestabilidad en las predicciones.\\
+
+Después, se eligió un número de épocas \texttt{n\_epochs=33}, el cual se encuentra en el rango de 30-35 sugerido en el notebook. Se tomó este valor para evitar un subentrenamiento o un costo temporal alto.\\
+
+Por otro lado, se eligión un \texttt{batch\_size=32}, ya que se buscabaun punto medio entre la estabilidad del gradiente y número de actualizaciones por época.\\
+
+Por último, se escogió \texttt{dim\_oculto\_f=56}, \texttt{dim\_oculto\_enc=40} y \texttt{dim\_oculto\_dec=56} para reducir el costo temporal y computacional que se puede tener con estructuras más grandes, pero también mantener una buena capacidad en la red frente a estructuras más pequeñas.
+
+\section{Tabla de resultados RMSE}
+
+La métrica utilizada fue el error cuadrático medio de raíz:
+\[
+\mathrm{RMSE}=\sqrt{\frac{1}{n}\sum_{i=1}^{n}\left(y_i-\hat{y}_i\right)^2}.
+\]
+
+\noindent En la Tabla~\ref{tab:resultados}, \textit{rec} corresponde al RMSE de reconstrucción y \textit{ext} al RMSE de extrapolación.
+
+\begin{table}[H]
+\centering
+\caption{Resultados comparativos de RMSE.}
+\label{tab:resultados}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+\textbf{Modelo} & \textbf{30\% rec} & \textbf{30\% ext} & \textbf{60\% rec} & \textbf{60\% ext} & \textbf{100\% rec} & \textbf{100\% ext} & \textbf{Params} & \textbf{Tiempo} \\
+\midrule
+Método clásico & 0.0000 & 0.1142 & 0.0000 & 0.0866 & 0.0000 & nan & 4 & 0.0s \\
+Neural ODE & 0.4989 & 0.5000 & 0.4969 & 0.5038 & 0.4997 & nan & 6,153 & 2652.8s \\
+Latent ODE & 0.5656 & 0.5656 & 0.5634 & 0.5689 & 0.5656 & nan & 12,593 & 3346.5s \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\section{Figuras}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{fig_1.png}
+    \caption{Exploración del dataset.}
+    \label{fig:exploracion}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth,height=0.66\textheight,keepaspectratio]{fig_2.png}
+    \caption{Comparación de modelos con 60\% de observaciones.}
+    \label{fig:comparacion}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{fig_3.png}
+    \caption{Curvas de aprendizaje.}
+    \label{fig:aprendizaje}
+\end{figure}
+
+\FloatBarrier
+
+\section{Respuestas a las preguntas de análisis}
+
+\subsection*{P1. ¿Con qué porcentaje de observaciones empieza a ganar la Neural ODE?}
+
+Primero se analiza el RMSE de reconstrucción. Revisando la tabla \ref{tab:resultados}, se puede observar que el RMSE$_{rec}$ es menor en el \textit{Método Clásico} que en la \textit{Neural ODE} en el 30\%, 60\% y 100\%, eso significa que ningún porcentaje de observaciones la Neural ODE empieza a ganar respecto al método clásico en la interpolación de los datos, de hecho, en el método clásico, RMSE$_{rec}=0$ para todo porcentaje de observaciones, lo que significa que el ajuste dado por los \texttt{splines} es exacto. Por otro lado, si se mira el RMSE de extrapolación, el RMSE del método clásico sigue siendo mucho más bajo que el de la Neural ODE, ya que, por ejemplo en el 60\% de observaciones, el RMSE de extrapolación del método clásico es 0.0866 y el de la Neural ODE es de 0.5038, y esta dinámica se mantiene para todo porcentaje de observaciones. Lo anterior concluye que el \textbf{\textit{Método clásico siempre gana a la Neural ODE}}.\\
+
+Por otro lado, observando nuevamente la tabla \ref{tab:resultados}, se puede ver que el RMSE de la Neural ODE siempre es menor que el RMSE de la Latent ODE, tanto para el RMSE de reconstrucción como el RMSE de extrapolación. A pesar de que en ambos casos se tengan valor altos (ya que oscilan entre 0.45 y 0.6), se nota una clara diferencia entre la Neural ODE y la Latent ODE. En este caso, \textbf{\textit{la Neural ODE le gana a la Latent ODE en todo porcentaje de observaciones.}}
+\subsection*{P2. ¿Por qué el encoder RNN corre en orden inverso al tiempo?}
+
+Para responder esta pregunta, es necesario revisar el \texttt{Notebook 8}. El encoder busca hallar el estado inicial $z_{t_0}$, para esto, se toman los datos observados $x_{t_N},\dots, x_{t_1}$. El encoder RNN corre en orden inverso al tiempo ya que para buscar el estado inicial $z_{t_0}$ lo natural es usar un dato que contenga una información cercana a $t_0$, por lo cual, el encoder empieza a procesar los datos desde $x_{t_N}$ hasta $x_{t_1}$ para poder encontrar el estado inicial $z_{t_0}$.
+
+\subsection*{P3. ¿Hubo algún resultado sorpresivo? ¿Por qué ocurrió?}
+
+Sí, lo hubo. A pesar de elegir unos hiperparámetros equilibrados para mejorar el aprendizaje de la Neural ODE y la Latent ODE, increíblemente el Método Clásico tuvo mejores resultados en todos los porcentajes de observaciones, tanto en reconstrucción como en extrapolación, esto se puede deber a:
+\begin{itemize}[leftmargin=0.5cm]
+    \item El método clásico genera ya el ajuste mediante \texttt{splines}, no necesita realizar un aprendizaje ni nada por el estilo, sino que este método ya es algo definido que simplemente depende de los datos dados.
+    \item En la figura \ref{fig:exploracion}, se puede observar que las trayectorias presentan picos (que pueden ser generados por un ruido que perturbe la trayectoria) y no son suaves, eso es algo a tener en cuenta ya que la Neural ODE y la Latent ODE trabajan con dinámicas continuas
+    $$\frac{dh(t)}{dt}=f(h(t),t,\theta),$$
+    y esto puede generar curvas que parecen ser suaves, ya que se obtienen integrando dichas dinámicas. De hecho, es claro que las predicciones fallaron mucho al revisar la figura \ref{fig:comparacion}, donde la curva de predicción difiere mucho de la real y los datos observados.
+\end{itemize}
+
+\subsection*{P4. ¿En qué tipo de problema NO recomendarían una Neural ODE?}
+
+Basándose en los resultados dados en la tabla \ref{tab:resultados} y la figura \ref{fig:comparacion}, no se recomienda usar una Neural ODE en datos que generen trayectorias que no sean tan suaves y que posean muchos picos, debido a lo que se dijo en la respuesta de la pregunta anterior, sumano a que estos picos se generan por algún ruido o alguna perturbación que la Neural ODE no alcanza a identificar.  Además, como se ve en la figura \ref{fig:comparacion}, la Neural ODE generó trayectorias suaves que están muy alejadas de la trayectoria real.
+
+\section{Conclusiones}
+\begin{itemize}
+    \item Este proyecto nace del interés por involucrarnos y de analizar, mediante datos reales, el comportamiento de los modelos de redes neuronales NEURAL ODE Y LATENT ODE, para compararlos con un método numérico/inteprolatorio basado en splines. A través de esta comparación, fue posible estudiar las ventajas y limitaciones de cada enfoque frente a trayectorias temporales complejas y ruidosas como las generadas por los datos del COVID-19. 
+
+    \item A partir de los resultados obtenidos, se observó que el método clásico presentó un mejor desempeño tanto en reconstrucción y extrapolación, usando el $30\%$, $60\%$ y el $100\%$ de los datos temporales (los datos de la trayectoria de casos nuevos). Esto nos da a entender, que los métodos clásicos sigue siendo competitivos ante modelos de redes neuronales basados en EDO'S.
+
+    \item Por otro lado, aunque la \textit{Neural ODE} y la \textit{Latent ODE} lograron seguir parcialmente el comportamiento general de las trayectorias, ambas tuvieron dificultades al trabajar con datos tan irregulares y con cambios bruscos como los del COVID-19. En muchas ocasiones, las predicciones generadas resultaron demasiado suaves en comparación con las trayectorias reales, lo que terminó afectando la precisión de los resultados. Esto nos lleva a pensar que las \textit{Neural ODE} funcionan mejor en problemas donde los datos presentan comportamientos más continuos y suaves.
+
+    \item Tenemos también como un conclusión definitiva de nuestro aporte en este notebook, la importancia de los hiperparámetros, la elección de estos deben representar un equilibrio entre capacidad expresiva, estabilidad y costo computacional. Aumentar la complejidad de la red puede mejorar la capacidad de representación (y por ende,la cercanía con la trayectoria real) pero también incrementa y en gran medida el tiempo de entrenamiento/ejecución. De hecho y como pudimos observar, los modelos basados en ODE, tomaron mucho más tiempo computacional que el método clásico (un método nunérico), sin incluso lograr un mejor desempeño.
+\item Por último, se si mira la figura \ref{fig:aprendizaje}, se observa que la Latent ODE tuvo un mejor aprendizaje que la Neural ODE, debido a que la perdida bajó considerablemente, mientras que con la Neural ODE se mantuvo casi constante. Eso si, la perdida de la Neural ODE es menor a la perdida de la Latent ODE, a pesar de que esta última tuviera un mejor aprendizaje.
+\end{itemize}
+
+\begin{thebibliography}{9}
+
+\bibitem{chen2018}
+Chen, R. T. Q., Rubanova, Y., Bettencourt, J., and Duvenaud, D. K. (2018). \textit{Neural Ordinary Differential Equations}. Advances in Neural Information Processing Systems.
+
+\bibitem{rubanova2019}
+Rubanova, Y., Chen, R. T. Q., and Duvenaud, D. K. (2019). \textit{Latent Ordinary Differential Equations for Irregularly-Sampled Time Series}. Advances in Neural Information Processing Systems.
+
+\bibitem{jhu}
+Johns Hopkins University Center for Systems Science and Engineering. COVID-19 Data Repository.
+
+\end{thebibliography}
+
+\end{document}
